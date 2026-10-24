@@ -26,6 +26,11 @@ A vibrant, 2-player split-screen arcade reflex battle game inspired by the 3D an
 - **Web Audio API Synthesizer**:
   - Crisp blade slices, juicy splats, ascending combo chimes, toxic warning hums, defeat buzzers, and a cheerful pastoral arcade BGM synthesizer.
 
+- **⚡ Verilog Digital Logic Core (EDA Playground)**:
+  - Game logic (reflex arbitration, speed bonus ALU, combo multiplier shifts, 12-bit score accumulators, and poison gate detection) is modeled in **synthesizable Verilog HDL** in [`verilog/design.sv`](./verilog/design.sv) with testbench [`verilog/testbench.sv`](./verilog/testbench.sv).
+  - The web application executes a cycle-accurate gate-level digital hardware core ([`src/verilog_hardware_core.js`](./src/verilog_hardware_core.js)) directly driving the game logic.
+  - Interactive **Hardware RTL Monitor** in the UI displays live clock cycles, gate wires, and binary register buses during gameplay!
+
 ---
 
 ## 🚀 Running Locally
@@ -39,3 +44,14 @@ npm run dev
 ```
 
 Visit `http://localhost:5173/` in your browser.
+
+---
+
+## 💻 Running the Verilog Logic in EDA Playground
+
+1. Go to [**EDA Playground**](https://www.edaplayground.com/).
+2. Select **SystemVerilog/Verilog** and choose **Icarus Verilog 0.10.0** (or Aldec Riviera Pro / VCS).
+3. Check the **"Open EPWave after run"** checkbox.
+4. Copy [`verilog/design.sv`](./verilog/design.sv) into the left pane.
+5. Copy [`verilog/testbench.sv`](./verilog/testbench.sv) into the right pane.
+6. Click **Run** to simulate and view the waveform VCD!

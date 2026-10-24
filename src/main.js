@@ -100,6 +100,10 @@ function initApp() {
         <button id="quick-frame-btn" class="quick-btn" title="Toggle Mobile Frame Simulator">
           <span id="frame-icon">${state.simulatorFrame ? '📱' : '🖥️'}</span>
         </button>
+        <button id="quick-hw-btn" class="quick-btn" title="Toggle Verilog Hardware Logic Monitor (EDA Playground)">
+          <span>⚡</span>
+          <span>RTL</span>
+        </button>
       </header>
 
       <!-- SCREEN 0: INTRO / SPLASH SCREEN (User Reference Image) -->
@@ -269,6 +273,71 @@ function initApp() {
           </div>
         </div>
       </section>
+
+      <!-- VERILOG HARDWARE LOGIC MONITOR (EDA Playground Netlist) -->
+      <aside id="hw-logic-monitor" class="hw-monitor-panel">
+        <div class="hw-monitor-header">
+          <div class="hw-title"><span>⚡</span> VERILOG HARDWARE MONITOR</div>
+          <button id="btn-close-hw-monitor" class="hw-close-btn" title="Close Hardware Monitor">✕</button>
+        </div>
+        <div class="hw-monitor-body">
+          <div class="hw-chip-tag">CORE: veggie_wonder_top (Gate-Level RTL)</div>
+          <div class="hw-row">
+            <span class="hw-lbl">CLK CYCLES:</span>
+            <span id="hw-val-clock" class="hw-val">00000</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">FSM STATE:</span>
+            <span id="hw-val-state" class="hw-val highlight">S_IDLE (3'b000)</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">ROUND POISON:</span>
+            <span id="hw-val-poison-type" class="hw-val toxic">001 (Apple)</span>
+          </div>
+          <div class="hw-divider">GATE-LEVEL SIGNALS & WIRES</div>
+          <div class="hw-row">
+            <span class="hw-lbl">wire is_wave_poison:</span>
+            <span id="hw-wire-poison" class="hw-bit">0</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">wire reflex_claimed:</span>
+            <span id="hw-wire-claimed" class="hw-bit">0</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">wire reflex_faster:</span>
+            <span id="hw-wire-faster" class="hw-val">NONE</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">wire p1_poison_trip:</span>
+            <span id="hw-wire-p1-poison" class="hw-bit">0</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">wire p2_poison_trip:</span>
+            <span id="hw-wire-p2-poison" class="hw-bit">0</span>
+          </div>
+          <div class="hw-divider">HARDWARE REGISTERS</div>
+          <div class="hw-row">
+            <span class="hw-lbl">P1_SCORE[11:0]:</span>
+            <span id="hw-reg-p1-score" class="hw-val">0 (0x000)</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">P2_SCORE[11:0]:</span>
+            <span id="hw-reg-p2-score" class="hw-val">0 (0x000)</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">P1_COMBO[3:0]:</span>
+            <span id="hw-reg-p1-combo" class="hw-val">0 (1.0x)</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">P2_COMBO[3:0]:</span>
+            <span id="hw-reg-p2-combo" class="hw-val">0 (1.0x)</span>
+          </div>
+          <div class="hw-row">
+            <span class="hw-lbl">LAST RTL EVENT:</span>
+            <span id="hw-val-event" class="hw-val small">HARDWARE_INIT</span>
+          </div>
+        </div>
+      </aside>
 
       <!-- MODAL: PAUSE -->
       <div id="modal-pause" class="modal-overlay">
@@ -522,6 +591,47 @@ function beginCountdown() {
   }, 900);
 }
 
+// Render Verilog Hardware Telemetry to HUD Monitor
+function renderHardwareTelemetry(hw) {
+  if (!hw) return;
+  const clockEl = document.getElementById('hw-val-clock');
+  const stateEl = document.getElementById('hw-val-state');
+  const poisonTypeEl = document.getElementById('hw-val-poison-type');
+  const wirePoisonEl = document.getElementById('hw-wire-poison');
+  const wireClaimedEl = document.getElementById('hw-wire-claimed');
+  const wireFasterEl = document.getElementById('hw-wire-faster');
+  const wireP1PoisonEl = document.getElementById('hw-wire-p1-poison');
+  const wireP2PoisonEl = document.getElementById('hw-wire-p2-poison');
+  const regP1ScoreEl = document.getElementById('hw-reg-p1-score');
+  const regP2ScoreEl = document.getElementById('hw-reg-p2-score');
+  const regP1ComboEl = document.getElementById('hw-reg-p1-combo');
+  const regP2ComboEl = document.getElementById('hw-reg-p2-combo');
+  const eventEl = document.getElementById('hw-val-event');
+
+  if (clockEl) clockEl.textContent = String(hw.probe.clockCount).padStart(5, '0');
+  if (stateEl) stateEl.textContent = `${hw.stateName} (3'b${hw.state.toString(2).padStart(3, '0')})`;
+  if (poisonTypeEl) poisonTypeEl.textContent = `${hw.roundPoisonType.toString(2).padStart(3, '0')} (${state.currentRoundPoison})`;
+  if (wirePoisonEl) {
+    wirePoisonEl.textContent = hw.probe.isPoisonWire ? '1 (HIGH)' : '0 (LOW)';
+    wirePoisonEl.className = hw.probe.isPoisonWire ? 'hw-bit high toxic' : 'hw-bit';
+  }
+  if (wireClaimedEl) wireClaimedEl.textContent = (hw.probe.p1IsFasterWire || hw.probe.p2IsFasterWire) ? '1 (HIGH)' : '0 (LOW)';
+  if (wireFasterEl) wireFasterEl.textContent = hw.probe.p1IsFasterWire ? 'PLAYER 1' : hw.probe.p2IsFasterWire ? 'PLAYER 2' : 'NONE';
+  if (wireP1PoisonEl) {
+    wireP1PoisonEl.textContent = hw.probe.p1PoisonTripWire ? '1 (TRIP)' : '0';
+    wireP1PoisonEl.className = hw.probe.p1PoisonTripWire ? 'hw-bit high toxic' : 'hw-bit';
+  }
+  if (wireP2PoisonEl) {
+    wireP2PoisonEl.textContent = hw.probe.p2PoisonTripWire ? '1 (TRIP)' : '0';
+    wireP2PoisonEl.className = hw.probe.p2PoisonTripWire ? 'hw-bit high toxic' : 'hw-bit';
+  }
+  if (regP1ScoreEl) regP1ScoreEl.textContent = `${hw.p1Score} (0x${hw.p1Score.toString(16).toUpperCase()})`;
+  if (regP2ScoreEl) regP2ScoreEl.textContent = `${hw.p2Score} (0x${hw.p2Score.toString(16).toUpperCase()})`;
+  if (regP1ComboEl) regP1ComboEl.textContent = `${hw.p1Combo} (${hw.p1Combo >= 4 ? '2.0x' : hw.p1Combo >= 2 ? '1.5x' : '1.0x'})`;
+  if (regP2ComboEl) regP2ComboEl.textContent = `${hw.p2Combo} (${hw.p2Combo >= 4 ? '2.0x' : hw.p2Combo >= 2 ? '1.5x' : '1.0x'})`;
+  if (eventEl) eventEl.textContent = hw.probe.lastEvent;
+}
+
 // Launch Game Engine
 function launchGameArena() {
   showScreen('game');
@@ -552,9 +662,11 @@ function launchGameArena() {
     faceToFace: state.faceToFace,
     poisonRate: state.poisonRate,
     roundPoisonType: state.currentRoundPoison,
-    onScoreUpdate: ({ p1Score, p2Score, p1Combo, p2Combo }) => {
+    onScoreUpdate: ({ p1Score, p2Score, p1Combo, p2Combo, hwTelemetry }) => {
       p1ScoreEl.textContent = p1Score;
       p2ScoreEl.textContent = p2Score;
+
+      renderHardwareTelemetry(hwTelemetry);
 
       // Bump animation on change
       p1ScoreEl.classList.add('bump');
@@ -579,8 +691,9 @@ function launchGameArena() {
         p2ComboEl.classList.remove('visible');
       }
     },
-    onTimeUpdate: (timeLeft) => {
+    onTimeUpdate: (timeLeft, hwTelemetry) => {
       timerVal.textContent = timeLeft;
+      renderHardwareTelemetry(hwTelemetry);
       if (timeLeft <= 10) {
         timerBox.classList.add('urgent');
       } else {
@@ -588,11 +701,13 @@ function launchGameArena() {
       }
     },
     onGameOver: (result) => {
+      if (result.hwTelemetry) renderHardwareTelemetry(result.hwTelemetry);
       handleGameOver(result);
     }
   });
 
   game.start();
+  renderHardwareTelemetry(game.hw.getHardwareTelemetry());
 }
 
 // Handle Game Over (No crown, no popper emoji)
@@ -749,6 +864,28 @@ function bindEvents() {
     if (game) game.resize();
     sound.playClick();
   });
+
+  // Verilog Hardware Logic Monitor Toggle
+  const hwBtn = document.getElementById('quick-hw-btn');
+  const hwMonitor = document.getElementById('hw-logic-monitor');
+  const closeHwBtn = document.getElementById('btn-close-hw-monitor');
+
+  if (hwBtn && hwMonitor) {
+    hwBtn.addEventListener('click', () => {
+      sound.playClick();
+      hwMonitor.classList.toggle('active');
+      if (game && hwMonitor.classList.contains('active')) {
+        renderHardwareTelemetry(game.hw.getHardwareTelemetry());
+      }
+    });
+  }
+
+  if (closeHwBtn && hwMonitor) {
+    closeHwBtn.addEventListener('click', () => {
+      sound.playClick();
+      hwMonitor.classList.remove('active');
+    });
+  }
 
   // Game HUD buttons
   const pauseBtn = document.getElementById('btn-pause-match');

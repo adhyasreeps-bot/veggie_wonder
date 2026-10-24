@@ -7,6 +7,7 @@
 import { FRUIT_TYPES, FRUIT_CONFIGS, drawFruit, drawFruitHalf } from './fruits.js';
 import { ParticleSystem } from './particles.js';
 import { sound } from './audio.js';
+import { VeggieWonderTopHardware } from './verilog_hardware_core.js';
 
 export class FruitDuelGame {
   constructor(canvas, options = {}) {
@@ -28,6 +29,7 @@ export class FruitDuelGame {
     );
 
     this.particles = new ParticleSystem();
+    this.hw = new VeggieWonderTopHardware();
 
     // Round poison fruit
     this.roundPoisonType = this.options.roundPoisonType || FRUIT_TYPES.POISON;
@@ -230,10 +232,12 @@ export class FruitDuelGame {
     player.fruits.splice(index, 1);
     player.totalSlices++;
 
-    const isPoisonFruit = Boolean(fruit.isPoison || fruit.type === FRUIT_TYPES.POISON);
+    // Clock slice event into the Verilog Hardware Core (Gate-Level RTL)
+    const reactionTime = Math.max(0.04, (performance.now() - fruit.spawnTime) / 1000);
+    const hwResult = this.hw.clockSlice(player.id, reactionTime);
 
-    // Check POISON FRUIT - INSTANT LOSS!
-    if (isPoisonFruit) {
+    // 1. Hardware Gate-Level Poison Trip Knockout
+    if (hwResult.isPoison) {
       this.handlePoisonHit(player, fruit);
       return;
     }
@@ -244,20 +248,11 @@ export class FruitDuelGame {
     sound.playSlice();
     sound.playSplat();
 
-    // Check wave reflex duel!
-    const wave = this.activeWaves.get(fruit.waveId);
-    let isFaster = false;
-    let reactionTime = '0.00';
-    if (wave) {
-      reactionTime = Math.max(0.04, (performance.now() - fruit.spawnTime) / 1000).toFixed(2);
-      if (!wave.claimedBy) {
-        wave.claimedBy = player.id;
-        isFaster = true;
-      }
-    }
+    const isFaster = hwResult.isFaster;
+    const reactionTimeFormatted = hwResult.reactionTimeFormatted;
 
-    // Combo streak handling
-    player.combo++;
+    // Read updated combo from hardware combo register
+    player.combo = hwResult.combo;
     player.comboTimer = 1.6; // seconds before combo resets
     if (player.combo > player.maxCombo) {
       player.maxCombo = player.combo;
@@ -267,19 +262,9 @@ export class FruitDuelGame {
       sound.playCombo(player.combo);
     }
 
-    // Score computation based on reflex reaction time
-    const comboMultiplier = player.combo >= 4 ? 2.0 : player.combo >= 2 ? 1.5 : 1.0;
-    let pointsEarned = 0;
-
-    if (isFaster) {
-      // Faster tap gets full base points + speed bonus
-      const speedBonus = Math.max(5, Math.round(25 * Math.max(0, 1.2 - parseFloat(reactionTime))));
-      pointsEarned = Math.round((cfg.points + speedBonus) * comboMultiplier);
-    } else {
-      // Slower tap gets partial reflex score
-      pointsEarned = Math.max(2, Math.round(cfg.points * 0.4));
-    }
-    player.score += pointsEarned;
+    // Read score and points calculated by hardware ALU
+    const pointsEarned = hwResult.pointsEarned;
+    player.score = hwResult.score;
 
     // Haptics if supported
     if (navigator.vibrate) {
@@ -321,25 +306,26 @@ export class FruitDuelGame {
     let text = `+${pointsEarned}`;
     let textColor = '#ffffff';
     if (isFaster) {
-      text = `⚡ ${reactionTime}s FASTER! +${pointsEarned}`;
+      text = `⚡ ${reactionTimeFormatted}s FASTER! +${pointsEarned}`;
       textColor = '#ffeb3b';
-    } else if (wave && wave.claimedBy) {
-      text = `${reactionTime}s SLOWER +${pointsEarned}`;
+    } else {
+      text = `${reactionTimeFormatted}s SLOWER +${pointsEarned}`;
       textColor = '#cfd8dc';
     }
     this.particles.addFloatingText(fruit.x, fruit.y - 10, text, textColor, isFaster ? 25 : 21, '#1b1b1b');
 
-    // Notify UI
+    // Notify UI with live hardware telemetry
     this.options.onScoreUpdate({
       p1Score: this.p1.score,
       p2Score: this.p2.score,
       p1Combo: this.p1.combo,
-      p2Combo: this.p2.combo
+      p2Combo: this.p2.combo,
+      hwTelemetry: this.hw.getHardwareTelemetry()
     });
 
-    // Sudden death check
-    if (this.options.gameMode === 'suddendeath' && (this.p1.score >= 50 || this.p2.score >= 50)) {
-      this.endGame('score_cap');
+    // Sudden death hardware check
+    if (hwResult.gameOver) {
+      this.endGame(hwResult.reason);
     }
   }
 
@@ -357,22 +343,25 @@ export class FruitDuelGame {
     this.particles.createJuiceExplosion(fruit.x, fruit.y, cfg.juiceColors, 40, true);
     this.particles.addFloatingText(fruit.x, fruit.y - 15, '☠️ TOXIC HIT!', '#e040fb', 34, '#1a0033');
 
-    const winner = loserPlayer.id === 1 ? this.p2 : this.p1;
+    // Winner evaluated by Verilog Hardware FSM
+    const winnerId = this.hw.fsm.winnerId || (loserPlayer.id === 1 ? 2 : 1);
+    const winnerName = winnerId === 1 ? this.p1.name : this.p2.name;
     const loser = loserPlayer;
 
     // Immediate loss!
     this.isRunning = false;
     setTimeout(() => {
       this.options.onGameOver({
-        winner: winner.name,
-        winnerId: winner.id,
+        winner: winnerName,
+        winnerId: winnerId,
         loser: loser.name,
         loserId: loser.id,
         reason: 'poison',
         p1Score: this.p1.score,
         p2Score: this.p2.score,
         p1Slices: this.p1.totalSlices,
-        p2Slices: this.p2.totalSlices
+        p2Slices: this.p2.totalSlices,
+        hwTelemetry: this.hw.getHardwareTelemetry()
       });
     }, 900);
   }
@@ -397,6 +386,16 @@ export class FruitDuelGame {
     });
 
     this.roundPoisonType = this.options.roundPoisonType || FRUIT_TYPES.POISON;
+
+    // Configure and reset Verilog Hardware Core
+    this.hw.configureMatch({
+      mode: this.options.gameMode,
+      duration: this.options.duration,
+      poisonType: this.roundPoisonType
+    });
+    this.hw.cmdPoisonReady();
+    this.hw.cmdCountdownDone();
+
     this.activeWaves = new Map();
     this.waveCounter = 0;
     this.lastWaveSpawn = performance.now() - 500; // immediate launch
@@ -404,18 +403,20 @@ export class FruitDuelGame {
     this.particles.clear();
     this.difficultyFactor = 1.0;
 
-    // Start 1-second countdown ticker
+    // Start 1-second hardware timer clock ticker
     if (this.gameTimer) clearInterval(this.gameTimer);
     this.gameTimer = setInterval(() => {
       if (!this.isRunning || this.isPaused) return;
 
-      this.timeRemaining--;
+      // Clock 1-second tick into Verilog Hardware Core
+      const tick = this.hw.clockSecondTick();
+      this.timeRemaining = tick.timeRemaining;
       this.difficultyFactor += 0.015; // difficulty increases steadily
 
-      this.options.onTimeUpdate(this.timeRemaining);
+      this.options.onTimeUpdate(this.timeRemaining, this.hw.getHardwareTelemetry());
 
-      if (this.timeRemaining <= 0) {
-        this.endGame('timeout');
+      if (tick.gameOver) {
+        this.endGame(tick.reason === 2 ? 'score_cap' : 'timeout');
       }
     }, 1000);
 
@@ -424,10 +425,12 @@ export class FruitDuelGame {
 
   pause() {
     this.isPaused = true;
+    this.hw.cmdPauseToggle();
   }
 
   resume() {
     this.isPaused = false;
+    this.hw.cmdPauseToggle();
     this.lastTime = performance.now();
   }
 
@@ -440,17 +443,23 @@ export class FruitDuelGame {
 
     sound.playVictory();
 
+    // Winner determined directly from Verilog Hardware Core FSM
+    let winnerId = this.hw.fsm.winnerId;
+    if (winnerId === 0) {
+      if (this.p1.score > this.p2.score) winnerId = 1;
+      else if (this.p2.score > this.p1.score) winnerId = 2;
+    }
+
     let winner = null;
-    let winnerId = 0;
     let loser = null;
     let loserId = 0;
 
-    if (this.p1.score > this.p2.score) {
+    if (winnerId === 1) {
       winner = this.p1.name;
       winnerId = 1;
       loser = this.p2.name;
       loserId = 2;
-    } else if (this.p2.score > this.p1.score) {
+    } else if (winnerId === 2) {
       winner = this.p2.name;
       winnerId = 2;
       loser = this.p1.name;
@@ -469,7 +478,8 @@ export class FruitDuelGame {
       p1Score: this.p1.score,
       p2Score: this.p2.score,
       p1Slices: this.p1.totalSlices,
-      p2Slices: this.p2.totalSlices
+      p2Slices: this.p2.totalSlices,
+      hwTelemetry: this.hw.getHardwareTelemetry()
     });
   }
 
@@ -487,11 +497,20 @@ export class FruitDuelGame {
     if (this.options.poisonRate === 'low') poisonProb = 0.12;
     if (this.options.poisonRate === 'chaos') poisonProb = 0.32;
 
-    const isPoisonWave = Math.random() < poisonProb;
+    const forcePoison = Math.random() < poisonProb;
     let chosenType = normalTypes[Math.floor(Math.random() * normalTypes.length)];
 
-    if (isPoisonWave) {
+    if (forcePoison) {
       chosenType = this.roundPoisonType || FRUIT_TYPES.POISON;
+    }
+
+    const waveId = ++this.waveCounter;
+
+    // Evaluate hardware gate-level poison detector circuit for this wave
+    const hwWave = this.hw.spawnWave(waveId, chosenType);
+    const isPoisonWave = hwWave.isPoison;
+
+    if (isPoisonWave) {
       sound.playPoisonWarn();
     }
 
@@ -503,7 +522,6 @@ export class FruitDuelGame {
     const rotation = Math.random() * Math.PI;
     const vRot = (Math.random() * 0.05 - 0.025);
     const now = performance.now();
-    const waveId = ++this.waveCounter;
 
     // Register active wave for reflex duel
     this.activeWaves.set(waveId, {
@@ -569,11 +587,13 @@ export class FruitDuelGame {
       player.comboTimer -= dt;
       if (player.comboTimer <= 0) {
         player.combo = 0;
+        this.hw.clockComboTimeout(player.id);
         this.options.onScoreUpdate({
           p1Score: this.p1.score,
           p2Score: this.p2.score,
           p1Combo: this.p1.combo,
-          p2Combo: this.p2.combo
+          p2Combo: this.p2.combo,
+          hwTelemetry: this.hw.getHardwareTelemetry()
         });
       }
     }

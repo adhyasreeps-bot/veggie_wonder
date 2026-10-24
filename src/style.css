@@ -1113,3 +1113,150 @@ input:checked + .slider:before {
     border-radius: 0;
   }
 }
+
+/* ============================================================
+   VERILOG HARDWARE LOGIC MONITOR (EDA PLAYGROUND OVERLAY)
+   ============================================================ */
+.hw-monitor-panel {
+  position: absolute;
+  top: 60px;
+  right: 12px;
+  width: 310px;
+  max-width: 90%;
+  background: rgba(13, 20, 14, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid #00e5ff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 229, 255, 0.3);
+  border-radius: 14px;
+  z-index: 100;
+  color: #e0f2f1;
+  font-family: 'Consolas', 'Courier New', monospace;
+  padding: 12px 14px;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  animation: slideInRt 0.25s ease-out forwards;
+}
+
+.hw-monitor-panel.active {
+  display: flex;
+}
+
+@keyframes slideInRt {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.hw-monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.3);
+  padding-bottom: 6px;
+}
+
+.hw-title {
+  font-family: var(--font-title);
+  font-size: 14px;
+  color: #00e5ff;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hw-close-btn {
+  background: none;
+  border: none;
+  color: #b0bec5;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.hw-close-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hw-chip-tag {
+  font-size: 10px;
+  color: #80cbc4;
+  background: rgba(0, 229, 255, 0.1);
+  padding: 3px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.hw-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  padding: 1.5px 0;
+}
+
+.hw-lbl {
+  color: #b0bec5;
+}
+
+.hw-val {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.hw-val.highlight {
+  color: #76ff03;
+}
+
+.hw-val.toxic {
+  color: #e040fb;
+}
+
+.hw-val.small {
+  font-size: 10px;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hw-bit {
+  background: #263238;
+  color: #90a4ae;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+}
+
+.hw-bit.high {
+  background: #00c853;
+  color: #ffffff;
+}
+
+.hw-bit.high.toxic {
+  background: #d500f9;
+  color: #ffffff;
+}
+
+.hw-divider {
+  font-size: 10px;
+  font-weight: 900;
+  color: #00e5ff;
+  border-top: 1px dashed rgba(0, 229, 255, 0.25);
+  margin-top: 5px;
+  padding-top: 4px;
+  letter-spacing: 0.5px;
+}
